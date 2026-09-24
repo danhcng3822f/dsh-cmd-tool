@@ -716,6 +716,16 @@ import type { Config } from '../src/executor.ts'
 import { markScriptCommand } from '../src/protocol.ts'
 
 /**
+ * A pinned pwsh path keeps the unmarked-branch assertions deterministic.
+ * `resolvePwshPath` returns whichever PowerShell exists on the host —
+ * `pwsh.exe` where PowerShell 7 is installed, else Windows PowerShell 5.1's
+ * `powershell.exe` — so asserting `argv[0]` any other way encodes a host fact
+ * rather than the behavior under test. A configured path is trusted as-is, so
+ * pinning it removes that dependency.
+ */
+const PWSH_PATH = 'C:\\fake\\pwsh.exe'
+
+/**
  * A complete config: the inherited constructor validates the numeric budgets
  * directly (schemastery's defaults are applied by the loader, not by the
  * constructor), so a partial object would throw before reaching argv().
@@ -727,6 +737,7 @@ function config(cmdPath: string): Config {
     maxOutputBytes: 64_000,
     maxSpillBytes: 1_000_000,
     graceMs: 200,
+    pwshPath: PWSH_PATH,
     cmdPath,
   }
 }
@@ -766,9 +777,7 @@ describe('CmdSandboxExecutor.argv', () => {
     const executor = new CmdSandboxExecutor(makeCtx(), config('D:\\alt\\cmd.exe'))
     const argv = argvOf(executor, spec('Write-Output hi'))
     expect(argv).toHaveLength(6)
-    // argv[0] is the resolved pwsh executable, which is a real path on a host
-    // that has PowerShell installed — never the bare name.
-    expect(argv[0]).toMatch(/pwsh(\.exe)?$/iu)
+    expect(argv[0]).toBe(PWSH_PATH)
     expect(argv.slice(1, 5)).toEqual(['-NoLogo', '-NoProfile', '-NonInteractive', '-Command'])
     expect(argv[5]).toContain('Write-Output hi')
   })
@@ -789,10 +798,10 @@ describe('CmdSandboxExecutor.argv', () => {
     const executor = new CmdSandboxExecutor(makeCtx(), config('D:\\alt\\cmd.exe'))
     // The bare marker: `scriptPathOf` returns '' here, and an empty path must
     // not become `cmd.exe /d /c ""`.
-    expect(argvOf(executor, spec('dsh-cmd-script:'))[0]).toMatch(/pwsh(\.exe)?$/iu)
+    expect(argvOf(executor, spec('dsh-cmd-script:'))[0]).toBe(PWSH_PATH)
     // A path that is not a .cmd file: the marker appeared in a command this
     // package's tool never wrote, so the command keeps its own dialect.
-    expect(argvOf(executor, spec('dsh-cmd-script:C:\\a.txt'))[0]).toMatch(/pwsh(\.exe)?$/iu)
+    expect(argvOf(executor, spec('dsh-cmd-script:C:\\a.txt'))[0]).toBe(PWSH_PATH)
   })
 
   it('exposes the resolved cmd path', () => {
