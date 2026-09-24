@@ -1870,7 +1870,7 @@ describe.skipIf(process.platform !== 'win32')('cmd tool over the real cmd.exe', 
 - [ ] **Step 2: Run the suite**
 
 Run: `npx vitest run tests/integration.spec.ts`
-Expected: PASS on Windows, 14 tests. On a non-Windows host: skipped.
+Expected: PASS on Windows, 13 tests. On a non-Windows host: skipped.
 
 If `LocalSandbox` or `SandboxPolicy` reject the config used above, print the plugin's `Config` schema default export and correct the argument — do not drop the sandbox plugins: `CmdSandboxExecutor` injects `sandbox` and `sandboxPolicy` and will not activate without them.
 
