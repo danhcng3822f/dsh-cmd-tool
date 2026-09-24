@@ -785,6 +785,16 @@ describe('CmdSandboxExecutor.argv', () => {
     expect(argv.some(part => part.includes('dsh-cmd-script:'))).toBe(false)
   })
 
+  it('keeps the inherited dialect when the marker carries no usable script path', () => {
+    const executor = new CmdSandboxExecutor(makeCtx(), config('D:\\alt\\cmd.exe'))
+    // The bare marker: `scriptPathOf` returns '' here, and an empty path must
+    // not become `cmd.exe /d /c ""`.
+    expect(argvOf(executor, spec('dsh-cmd-script:'))[0]).toMatch(/pwsh(\.exe)?$/iu)
+    // A path that is not a .cmd file: the marker appeared in a command this
+    // package's tool never wrote, so the command keeps its own dialect.
+    expect(argvOf(executor, spec('dsh-cmd-script:C:\\a.txt'))[0]).toMatch(/pwsh(\.exe)?$/iu)
+  })
+
   it('exposes the resolved cmd path', () => {
     const executor = new CmdSandboxExecutor(makeCtx(), config('D:\\alt\\cmd.exe'))
     expect(executor.cmdPath).toBe('D:\\alt\\cmd.exe')
@@ -884,7 +894,15 @@ export class CmdSandboxExecutor extends SandboxPwshExecutor {
   /** The dialect seam: `cmd.exe` for a marked script command, else the inherited pwsh argv. */
   protected override argv(spec: ShellExecSpec): string[] {
     const scriptPath = scriptPathOf(spec.command)
-    if (scriptPath === undefined) return super.argv(spec)
+    // Two guards keep the marker from switching dialects on a command this
+    // package's tool never wrote. An empty path is the bare marker, which
+    // would become `cmd.exe /d /c ""`; a non-.cmd path means the marker
+    // appeared inside some other caller's command. Both keep the inherited
+    // dialect, so the failure surfaces as that caller's own error rather than
+    // as a silently executed file.
+    if (scriptPath === undefined || scriptPath.length === 0 || !scriptPath.toLowerCase().endsWith('.cmd')) {
+      return super.argv(spec)
+    }
     return [this.resolvedCmdPath, '/d', '/c', scriptPath]
   }
 }
@@ -895,7 +913,7 @@ export default CmdSandboxExecutor
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `npx vitest run tests/executor.spec.ts`
-Expected: PASS, 4 tests.
+Expected: PASS, 5 tests.
 
 If the first case fails because the inherited argv has a different length, print the argv and adjust the expectation — do not change `src/executor.ts`: the unmarked branch must stay byte-identical to the parent's.
 
@@ -1836,6 +1854,15 @@ describe.skipIf(process.platform !== 'win32')('cmd tool over the real cmd.exe', 
     expect(text(result)).toContain('Xin chào Việt Nam')
   })
 
+  it('applies batch-file percent semantics end to end', async () => {
+    // The file-based mechanism changes `%` handling: inside a batch file `%%`
+    // is the escape for a literal `%`, whereas on a command line `%%` stays
+    // `%%`. Nothing in the unit suites pins this, so it is pinned here against
+    // the real interpreter.
+    const result = await call('cmd', { command: 'echo 100%% done', description: 'echo a literal percent' }, agent())
+    expect(lf(text(result))).toBe('100% done\n')
+  })
+
   it('honors an explicit workdir', async () => {
     const result = await call('cmd', { command: 'echo [%CD%]', description: 'print cwd', workdir: dir }, agent())
     expect(text(result)).toContain(dir)
@@ -1877,7 +1904,7 @@ describe.skipIf(process.platform !== 'win32')('cmd tool over the real cmd.exe', 
 - [ ] **Step 2: Run the suite**
 
 Run: `npx vitest run tests/integration.spec.ts`
-Expected: PASS on Windows, 13 tests. On a non-Windows host: skipped.
+Expected: PASS on Windows, 14 tests. On a non-Windows host: skipped.
 
 If `LocalSandbox` or `SandboxPolicy` reject the config used above, print the plugin's `Config` schema default export and correct the argument — do not drop the sandbox plugins: `CmdSandboxExecutor` injects `sandbox` and `sandboxPolicy` and will not activate without them.
 
