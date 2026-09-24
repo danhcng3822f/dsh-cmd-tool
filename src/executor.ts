@@ -43,27 +43,32 @@ export interface Config extends PwshConfig {
 }
 
 /**
- * Runtime schema for this plugin. A superset of the parent's: the loader
- * validates the composition row against THIS schema, so `cmdPath` survives to
- * the constructor. It is read there rather than through the settings-derived
- * source for the reason documented on {@link Config.cmdPath}.
- */
-export const Config: z<Config> = z.object({
-  cwd: z.string(),
-  timeoutMs: z.number().default(120_000),
-  maxTimeoutMs: z.number().default(600_000),
-  maxOutputBytes: z.number().default(64_000),
-  maxSpillBytes: z.number().default(64 * 1024 * 1024),
-  graceMs: z.number().default(3_000),
-  pwshPath: z.string(),
-  cmdPath: z.string(),
-})
-
-/**
  * Registers as `ctx.shell` in place of `SandboxPwshExecutor` and serves both
  * dialects: marked commands run under `cmd.exe`, everything else under pwsh.
  */
 export class CmdSandboxExecutor extends SandboxPwshExecutor {
+  /**
+   * Runtime schema for this plugin: the parent's own schema extended with this
+   * executor's one extra knob, COMPOSED rather than copied so the parent's
+   * defaults and field set cannot drift out of sync here.
+   *
+   * It is a static on the class, not a module-level export. The loader unwraps
+   * a module to its `default` export before reading `Config`
+   * (`vendor/loader/src/index.ts`, `unwrapExports`), so a module-level schema
+   * is never consulted. Without this static, `cmdPath` would still reach the
+   * constructor — cordis leaves undeclared keys in place — but nothing would
+   * declare it, and the knob would rest on that leniency instead of on a
+   * contract.
+   *
+   * If `z.intersect` fights the types, fall back to an explicit `z.object`
+   * that repeats the parent's fields, and say in this JSDoc that those
+   * defaults are pinned copies of the parent's that must be updated with it.
+   */
+  static Config = z.intersect([
+    SandboxPwshExecutor.Config,
+    z.object({ cmdPath: z.string() }),
+  ])
+
   private readonly resolvedCmdPath: string
 
   constructor(ctx: Context, config: Config) {
@@ -82,10 +87,11 @@ export class CmdSandboxExecutor extends SandboxPwshExecutor {
   /** The dialect seam: `cmd.exe` for a marked script command, else the inherited pwsh argv. */
   protected override argv(spec: ShellExecSpec): string[] {
     const scriptPath = scriptPathOf(spec.command)
-    // Two guards keep the marker from switching dialects on a command this
-    // package's tool never wrote. An empty path is the bare marker, which
-    // would become `cmd.exe /d /c ""`; a non-.cmd path means the marker
-    // appeared inside some other caller's command. Both keep the inherited
+    // Three guards keep the marker from switching dialects on a command this
+    // package's tool never wrote. No marker at all is the ordinary case and
+    // keeps the inherited dialect by design. An empty path is the bare marker,
+    // which would become `cmd.exe /d /c ""`; a non-.cmd path means the marker
+    // appeared inside some other caller's command. All three keep the inherited
     // dialect, so the failure surfaces as that caller's own error rather than
     // as a silently executed file.
     if (scriptPath === undefined || scriptPath.length === 0 || !scriptPath.toLowerCase().endsWith('.cmd')) {
