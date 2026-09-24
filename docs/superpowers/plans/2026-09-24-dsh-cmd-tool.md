@@ -309,7 +309,14 @@ describe('resolveCmdPath', () => {
   })
 
   it('ignores an empty configured path', () => {
-    expect(resolveCmdPath('', { ComSpec: 'D:\\alt\\cmd.exe' }, 'win32')).toBe('D:\\alt\\cmd.exe')
+    // Asserted against the undefined case rather than a literal path: the
+    // implementation existence-checks every candidate (mirroring
+    // dsh-pwsh-local), so which candidate wins is a host fact, while "an empty
+    // string is treated as absent" is the behavior under test.
+    const env = { ComSpec: 'D:\\alt\\cmd.exe', SystemRoot: 'C:\\Windows' }
+    const withEmpty = resolveCmdPath('', env, 'win32')
+    expect(withEmpty).toBe(resolveCmdPath(undefined, env, 'win32'))
+    expect(withEmpty.length).toBeGreaterThan(0)
   })
 
   it('returns a bare cmd.exe off Windows', () => {
