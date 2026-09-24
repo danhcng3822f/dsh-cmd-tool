@@ -1,0 +1,20 @@
+# dsh-cmd-tool bundle patch.
+#
+# Applied after @deepseek-ai/dsh-base, so the `pwsh-sandbox` row already exists
+# and this layer can disable it: ctx.shell admits exactly one provider, so the
+# cmd-capable executor replaces the PowerShell-only one rather than joining it.
+# The replacement keeps the PowerShell dialect for every command that does not
+# carry the tool's internal marker, so the untouched `pwsh` tool behaves exactly
+# as before.
+#
+# Override either row's config from a profile's own cordis.patch.yml, restating
+# the whole `config` value — a patch replaces a row's config rather than merging.
+
+- id: pwsh-sandbox
+  disabled: true
+
+- insert:
+    - id: cmd-sandbox
+      name: dsh-cmd-tool/executor
+    - id: tool-cmd
+      name: dsh-cmd-tool/tool

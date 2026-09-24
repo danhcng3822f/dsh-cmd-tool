@@ -1,0 +1,50 @@
+{
+  "name": "dsh-cmd-tool",
+  "version": "0.1.0",
+  "description": "Windows Command Prompt (cmd.exe) tool for DeepSeek Harness, alongside pwsh",
+  "type": "module",
+  "exports": {
+    "./tool": {
+      "types": "./lib/types/tool.d.ts",
+      "default": "./lib/tool.js"
+    },
+    "./executor": {
+      "types": "./lib/types/executor.d.ts",
+      "default": "./lib/executor.js"
+    },
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "src",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "check": "tsc -p tsconfig.json --noEmit"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-bundle",
+    "cmd",
+    "windows"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.6",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  }
+}
