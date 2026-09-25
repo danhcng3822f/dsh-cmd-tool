@@ -59,10 +59,6 @@ export class CmdSandboxExecutor extends SandboxPwshExecutor {
    * constructor — cordis leaves undeclared keys in place — but nothing would
    * declare it, and the knob would rest on that leniency instead of on a
    * contract.
-   *
-   * If `z.intersect` fights the types, fall back to an explicit `z.object`
-   * that repeats the parent's fields, and say in this JSDoc that those
-   * defaults are pinned copies of the parent's that must be updated with it.
    */
   static Config = z.intersect([
     SandboxPwshExecutor.Config,
