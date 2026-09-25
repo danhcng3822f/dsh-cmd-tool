@@ -7,7 +7,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
@@ -130,7 +130,9 @@ describe.skipIf(process.platform !== 'win32')('cmd tool over the real cmd.exe', 
 
   it('expands environment variables', async () => {
     const result = await call('cmd', { command: 'echo [%CD%]', description: 'print the working directory' }, agent())
-    expect(text(result)).toContain(dir)
+    // Exact, not `toContain`: a subdirectory path contains `dir` as a prefix, so
+    // a containment check would also pass for the wrong directory.
+    expect(lf(text(result))).toBe(`[${dir}]\n`)
   })
 
   it('runs a multi-line if block', async () => {
@@ -186,8 +188,14 @@ describe.skipIf(process.platform !== 'win32')('cmd tool over the real cmd.exe', 
   })
 
   it('honors an explicit workdir', async () => {
-    const result = await call('cmd', { command: 'echo [%CD%]', description: 'print cwd', workdir: dir }, agent())
-    expect(text(result)).toContain(dir)
+    // A workdir DISTINCT from the session header cwd. `resolveWorkdir` returns
+    // the session cwd when the argument is absent and the argument unchanged
+    // when it is absolute, so passing `dir` here would pass identically for a
+    // tool that ignored `args.workdir` entirely.
+    const sub = join(dir, 'sub')
+    await mkdir(sub, { recursive: true })
+    const result = await call('cmd', { command: 'echo [%CD%]', description: 'print cwd', workdir: sub }, agent())
+    expect(lf(text(result))).toBe(`[${sub}]\n`)
   })
 
   it('runs a background job and collects its output', async () => {
