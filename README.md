@@ -78,7 +78,31 @@ the tool description the model sees, so the model is not left to discover them.
 
 ## Install
 
-### 1. Register the bundle in the profile
+The package's `exports` point into `lib/` (`./tool` → `lib/tool.js`, `./executor`
+→ `lib/executor.js`) and `.gitignore` excludes `lib/`. A fresh clone therefore
+has no loadable entry point at all, and registering the bundle before building
+it produces a loader failure for a missing `dsh-cmd-tool/tool`. Building is the
+**first** install step, not an afterthought.
+
+### 1. Build the package
+
+```powershell
+cd D:\dsh-cmd-plugin
+npm run build
+```
+
+`tsc -p tsconfig.json` compiles `src/` to `lib/` (NodeNext, declarations to
+`lib/types/`), and the two loader entries then resolve through the package's
+`exports` map. The build needs `node_modules`: `typescript` for the compiler and
+the `@deepseek-ai` junction for the imports. On a from-scratch setup, do the
+`npm install` and junction steps in **The `node_modules/@deepseek-ai` junction**
+below first — `npm install` can prune the junction, so it must come before the
+build rather than after it.
+
+Nothing watches `src/`. Rebuild and restart after every change there, or the
+running server keeps loading the previous `lib/`.
+
+### 2. Register the bundle in the profile
 
 Edit `$DSH_HOME/profiles/web/package.json` (on this machine,
 `C:\Users\Admin\.dsh\profiles\web\package.json`):
@@ -95,13 +119,13 @@ cd C:\Users\Admin\.dsh\profiles\web
 pnpm install
 ```
 
-### 2. Restart `dsh web`
+### 3. Restart `dsh web`
 
 `dsh.profile.bundles` is read at boot and does **not** hot-reload. (The
 profile's own `cordis.patch.yml` does hot-reload; the bundle list does not.)
 Restart the server before expecting the `cmd` tool to appear.
 
-### 3. Verify the composed tree
+### 4. Verify the composed tree
 
 Before or after restarting, the composed configuration can be dumped without
 booting the server:
@@ -233,7 +257,7 @@ merging it.
 
 ```powershell
 cd D:\dsh-cmd-plugin
-npx vitest run       # 76 tests across 7 files
+npx vitest run       # 80 tests across 7 files
 npm run check        # tsc --noEmit over src/ only
 ```
 
@@ -249,23 +273,29 @@ Unicode echo, `workdir` honored, and a background job collected with
 still runs through the same executor. The suite self-skips off Windows, so a
 green run on Windows is the only run that proves anything.
 
+Its second block composes the same stack at **`workspace-write`** — the mode
+this package ships as its default — so a marked command really does go through
+the Windows ACL runner: a confined command runs and returns its output, a write
+inside the workspace succeeds, and a write outside it is refused and renders
+`[sandbox: file access denied under workspace-write mode]`. That block installs
+`ctx.sandbox.internals.windowsAclRunnerEntry`, the core provider's own test
+hook, and **only** for one reason: `dsh-sandbox-local` locates the runner with
+`import.meta.resolve`, and vitest's SSR transform — which `@deepseek-ai/*`
+reaches because the junction resolves outside this project's `node_modules` —
+rewrites `import.meta` to a shim with no `resolve`. Without that substitution
+every confined call here dies with `__vite_ssr_import_meta__.resolve is not a
+function` before any runner spawns, so no suite in this package can exercise
+confinement at all. The hook short-circuits that single call and substitutes the
+real runner path; the runner, the restricted token, the ACL grants, and the
+denial classification are all the production ones.
+
 The remaining six suites are platform-independent and use a fake executor or
 pure functions: `protocol.spec.ts` (marker round-trip), `resolve.spec.ts`
 (`cmd.exe` resolution branches), `script.spec.ts` (script body, encoding, CRLF
 normalization, disposal, prune), `render.spec.ts` (result rendering),
-`executor.spec.ts` (the `argv` override), and `tool.spec.ts` (the consumer
-surface — registration, validation, escalation gating, disposal on every path,
-`presentResult`).
-
-## Build
-
-```powershell
-npm run build
-```
-
-`tsc -p tsconfig.json` compiles `src/` to `lib/` (NodeNext, declarations to
-`lib/types/`). The two loader entries resolve to `lib/executor.js` and
-`lib/tool.js` through the package's `exports` map.
+`executor.spec.ts` (the `argv` override and the composed `Config` schema), and
+`tool.spec.ts` (the consumer surface — registration, validation, escalation
+gating, disposal on every path, `presentResult`).
 
 ## License
 
