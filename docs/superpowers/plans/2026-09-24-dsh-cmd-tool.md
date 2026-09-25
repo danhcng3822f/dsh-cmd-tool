@@ -1781,6 +1781,14 @@ git commit -m "feat: the cmd tool"
 
 - [ ] **Step 1: Write `tests/integration.spec.ts`**
 
+**Corrections applied during implementation — the code block below is superseded on these five points. `tests/integration.spec.ts` as committed is the authoritative form.** Each was found by running the block below verbatim and is verified against harness source:
+
+1. **The `agent()` helper must carry `session.events: []` and an `id`.** A bare `{ session: { header: { id, cwd } } }` fails EVERY call: `SandboxPolicyService.resolve` returns `effectiveSandboxMode(session.events)` (`sandbox-policy/src/index.ts:150`), which indexes `events.length` (`sandbox-policy/src/session-mode.ts:53`).
+2. **`AgentRegistry` (`@deepseek-ai/dsh-agent`) must be mounted and `agent()` must return a live registered instance.** `dsh-jobs-local`'s `ensureOwnerCleanup` throws without `ctx.agents` and throws again unless the owner is the exact instance `ctx.agents.get(id)` returns (`jobs-local/src/index.ts:448-456`), so the two background cases could only ever exercise the unowned path otherwise.
+3. **Each background case must reuse ONE owner agent for the start, the read, and the kill.** `assertAccess` fences an owned job on `job.owner.id !== caller?.id` (`jobs-local/src/index.ts:357`), so a fresh `agent()` for `job_output` or `job_kill` raises "belongs to another session".
+4. **The workspace round-trip case expects `'written \n'`, not `'written\n'`.** `cmd.exe` keeps the space that precedes the `&` separator in the first command's text, so `echo written> out.txt & type out.txt` writes the bytes `119…110 32 13 10`. Measured both through this package and with a plain `cmd /d /c` at a prompt; `echo written>out.txt& type out.txt` (no space) writes `written` with none. Asserting the exact bytes pins that the command text reached the interpreter verbatim.
+5. **Two cases are added beyond the list below**, and the expected count is therefore 15, not 14: a foreground case asserting the model-facing text does not contain `CMD_SCRIPT_MARKER`, and assertions inside the background case that the rendered `job_list` label is the user's raw command and marker-free. The committed unit suites only prove the marker is *constructed*; these prove it is not rendered back.
+
 ```ts
 /**
  * Integration tests: the REAL `CmdSandboxExecutor` plus the `cmd` tool,
@@ -1960,7 +1968,7 @@ describe.skipIf(process.platform !== 'win32')('cmd tool over the real cmd.exe', 
 - [ ] **Step 2: Run the suite**
 
 Run: `npx vitest run tests/integration.spec.ts`
-Expected: PASS on Windows, 14 tests. On a non-Windows host: skipped.
+Expected: PASS on Windows, 15 tests. On a non-Windows host: skipped.
 
 If `LocalSandbox` or `SandboxPolicy` reject the config used above, print the plugin's `Config` schema default export and correct the argument — do not drop the sandbox plugins: `CmdSandboxExecutor` injects `sandbox` and `sandboxPolicy` and will not activate without them.
 
