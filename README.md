@@ -91,13 +91,18 @@ cd D:\dsh-cmd-plugin
 npm run build
 ```
 
-`tsc -p tsconfig.json` compiles `src/` to `lib/` (NodeNext, declarations to
-`lib/types/`), and the two loader entries then resolve through the package's
-`exports` map. The build needs `node_modules`: `typescript` for the compiler and
-the `@deepseek-ai` junction for the imports. On a from-scratch setup, do the
-`npm install` and junction steps in **The `node_modules/@deepseek-ai` junction**
-below first — `npm install` can prune the junction, so it must come before the
-build rather than after it.
+`tsc -p tsconfig.json` compiles the host half (`src/`) to `lib/` (NodeNext,
+declarations to `lib/types/`), and `node build-client.mjs` bundles the browser
+half (`src/client/`) into `lib/client.js`. The loader entries and the client
+entry then resolve through the package's `exports` map.
+
+The build needs `node_modules`, so `npm install` comes first — see **How
+`@deepseek-ai` imports resolve** below for why that is safe and what those
+dependencies are.
+
+`npm run check` type-checks both halves. The host `tsconfig.json` deliberately
+excludes `src/client/**` (that half needs JSX and DOM libs); the client config
+`tsconfig.client.json` covers it.
 
 Nothing watches `src/`. Rebuild and restart after every change there, or the
 running server keeps loading the previous `lib/`.
@@ -124,6 +129,10 @@ pnpm install
 `dsh.profile.bundles` is read at boot and does **not** hot-reload. (The
 profile's own `cordis.patch.yml` does hot-reload; the bundle list does not.)
 Restart the server before expecting the `cmd` tool to appear.
+
+The same restart covers the browser half: the shell composes its client-plugin
+graph at boot from the installed `dsh.client` declarations. After the restart,
+**reload the page** — the browser is running the previously served bundle.
 
 ### 4. Verify the composed tree
 
@@ -159,30 +168,78 @@ rather than breaking it. A `--dump-config` dump shows only the host composition,
 so a disabled `tool-pwsh` row there is expected and does not mean the `pwsh`
 tool is gone.
 
-### The `node_modules/@deepseek-ai` junction
+### The `Cmd` row in the Web UI
 
-`node_modules/@deepseek-ai` in this package is a **junction** to
-`C:\Users\Admin\.dsh\profiles\node_modules\@deepseek-ai`. That is how
-`@deepseek-ai/*` imports resolve to the exact modules the running dsh loads.
-There is deliberately **no** `@deepseek-ai/*` entry in `dependencies`: installing
-those from npm risks a second `cordis` instance, which breaks the plugin tree.
+Without the browser half this package ships, a `cmd` call renders as a generic
+**"Tool call"** row. The Web client classifies a tool row through a table
+private to `dsh-client-ui-tool` (`TOOL_VARIANTS` / `TOOL_TITLES`); an unlisted
+tool name falls to the `others` variant, whose title is the literal "Tool
+call". Worse, because the generic card prefers the terminal view's description
+over the args-derived summary, the tool's own name never reaches the row at
+all — `toolName` is only a `data-tool` attribute.
 
-**`npm ci` deletes `node_modules/` and therefore destroys this junction.** If
-the junction is missing after any dependency operation, recreate it:
+The designed remedy is the keyed `tool.call.toolview` seat: **a registered key
+replaces the generic row**. `src/client/` registers the `cmd` key with a row
+titled **"Cmd"**, carrying the call's terminal card, so it sits beside the
+`Bash` and `Pwsh` rows as one of the shell tools rather than as an unclassified
+one.
 
-```powershell
-New-Item -ItemType Junction -Path D:\dsh-cmd-plugin\node_modules\@deepseek-ai -Target C:\Users\Admin\.dsh\profiles\node_modules\@deepseek-ai
-```
+That half is a separate build and a separate lifecycle:
 
-Confirm it resolves to the harness packages rather than to a copy:
+- `node build-client.mjs` bundles `src/client/index.tsx` into `lib/client.js`
+  (esbuild, CommonJS closure factory, externals read live from the shell's own
+  `PLATFORM_MODULES` list so module identities cannot drift). `npm run build`
+  runs it after `tsc`.
+- `package.json`'s `dsh.client` block declares the platform (`web`) and the
+  client plugins that must mount first, which is how the shell's module scan
+  discovers this half. **That scan runs at boot**, so adding or removing the
+  block needs a server restart.
+- It composes the row from platform modules only
+  (`@deepseek-ai/dsh-client-ui-primitives` for `DisclosureRow`, `StateDot`,
+  `TerminalBlock`, and the icons; `@deepseek-ai/dsh-client-ui-slots` for the
+  locale seat). `dsh-client-ui-tool` is not a shared platform module, so its
+  row components and card models are not importable from here — hence the
+  reimplementation in `src/client/CmdRow.tsx`.
+- The row carries its own locale namespace (`cmd-tool`) rather than borrowing
+  the conversation one, whose dictionary is likewise not importable. Its
+  terminal strings are copied from that dictionary on purpose:
+  `TerminalBlock`'s built-in label defaults are Chinese, so omitting `labels`
+  would silently mix languages into an English UI.
+- Styling is inline, not a CSS module: a CSS import would make esbuild emit a
+  sibling stylesheet that nothing loads. The row chrome comes from
+  `DisclosureRow`, whose styles ship with the shell.
+
+### How `@deepseek-ai` imports resolve
+
+Every `@deepseek-ai/*` package this plugin imports is declared in
+`dependencies` as a **`file:` link straight to its directory in the DSH
+checkout** — for example `"@deepseek-ai/dsh-pwsh-sandbox":
+"file:D:/deepseek-harness/packages/shell/pwsh-sandbox"`. npm symlinks those, so
+the imports resolve to the exact modules the running dsh loads.
+
+Installing the same packages from npm is what this avoids: a second copy of
+`@deepseek-ai/cordis` in the tree breaks the plugin. Pin the checkout you are
+actually running.
+
+Those paths are absolute and machine-specific — `D:/deepseek-harness` is this
+machine's checkout. On another machine, rewrite the `file:` paths (or re-run
+the generator that produced them) before `npm install`.
+
+> **Do not replace these with a `node_modules/@deepseek-ai` junction to
+> `$DSH_HOME/profiles/node_modules/@deepseek-ai`.** That was this package's
+> first design and it is destructive: `npm install` treats the junction target
+> as its own tree, prunes the symlinks inside it, and **empties the DSH module
+> fallback for every package that resolves through it** — not just this one. If
+> that ever happens, the fallback is rebuilt at the next dsh boot by
+> `healProfilesModuleFallback`; to repair it without a restart, run that export
+> from the checkout's built `@deepseek-ai/dsh-app-boot` with the app manifest
+> path (`apps/cli/package.json`) as its argument.
+
+Confirm resolution points at the harness packages rather than a copy:
 
 ```powershell
 node -e "console.log(require.resolve('@deepseek-ai/dsh-pwsh-sandbox/package.json',{paths:['D:/dsh-cmd-plugin']}))"
 ```
-
-Order matters when setting up from scratch: run `npm install` **first**, then
-create the junction, because `npm install` may prune unknown entries under
-`node_modules`.
 
 ## Configuration
 
@@ -229,6 +286,14 @@ merging it.
   failure mode is a **loud boot failure on duplicate `ctx.shell`** (the `shell`
   service admits exactly one provider, and mounting both fails on duplicate
   service registration) — never a silent one.
+- **The browser half is coupled to the client's private row table.** It exists
+  precisely because `TOOL_VARIANTS` / `TOOL_TITLES` live inside
+  `dsh-client-ui-tool` and cannot be extended from outside; if a future release
+  makes them extensible — or simply lists `cmd` — this row becomes redundant and
+  should be deleted rather than maintained. It also reimplements
+  `terminalCardModel`'s derivation, because `dsh-client-ui-tool` is not a shared
+  platform module; an upstream change to the `callView` / `resultView` wire
+  shape would have to be ported here by hand.
 - **`engines.node` declares `>=22.0.0`, but the committed vitest pulls a vite
   that wants `>=22.12.0`** (vite 7.3.6 declares
   `^20.19.0 || >=22.12.0`). This is dev-only: the published package's runtime
@@ -258,11 +323,12 @@ merging it.
 ```powershell
 cd D:\dsh-cmd-plugin
 npx vitest run       # 80 tests across 7 files
-npm run check        # tsc --noEmit over src/ only
+npm run check        # type-checks both halves (host + client)
 ```
 
-If `node_modules` is missing, run `npm install` **first** and then recreate the
-`@deepseek-ai` junction (see above) — `npm install` can prune it.
+If `node_modules` is missing, run `npm install`: the `@deepseek-ai/*`
+dependencies are `file:` links, so npm restores them instead of pruning a
+shared directory (see **How `@deepseek-ai` imports resolve**).
 
 `tests/integration.spec.ts` exercises a **real `cmd.exe`** through the real
 `CmdSandboxExecutor` and `ctx.tools.execute()`: quoted paths containing spaces,
@@ -281,8 +347,8 @@ inside the workspace succeeds, and a write outside it is refused and renders
 `ctx.sandbox.internals.windowsAclRunnerEntry`, the core provider's own test
 hook, and **only** for one reason: `dsh-sandbox-local` locates the runner with
 `import.meta.resolve`, and vitest's SSR transform — which `@deepseek-ai/*`
-reaches because the junction resolves outside this project's `node_modules` —
-rewrites `import.meta` to a shim with no `resolve`. Without that substitution
+reaches because those `file:` links resolve outside this project — rewrites
+`import.meta` to a shim with no `resolve`. Without that substitution
 every confined call here dies with `__vite_ssr_import_meta__.resolve is not a
 function` before any runner spawns, so no suite in this package can exercise
 confinement at all. The hook short-circuits that single call and substitutes the

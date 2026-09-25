@@ -12,6 +12,7 @@
       "types": "./lib/types/executor.d.ts",
       "default": "./lib/executor.js"
     },
+    "./client": "./lib/client.js",
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json"
   },
@@ -24,12 +25,21 @@
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-tool"
+      ]
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node build-client.mjs",
+    "build:client": "node build-client.mjs",
     "test": "vitest run",
-    "check": "tsc -p tsconfig.json --noEmit"
+    "check": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.client.json"
   },
   "keywords": [
     "deepseek-harness",
@@ -42,8 +52,39 @@
   "engines": {
     "node": ">=22.0.0"
   },
+  "dependencies": {
+    "@deepseek-ai/cordis": "file:D:/deepseek-harness/vendor/cordis",
+    "@deepseek-ai/dsh-agent": "file:D:/deepseek-harness/packages/core/agent",
+    "@deepseek-ai/dsh-client-locale": "file:D:/deepseek-harness/packages/client/locale",
+    "@deepseek-ai/dsh-client-runtime": "file:D:/deepseek-harness/packages/client/runtime",
+    "@deepseek-ai/dsh-client-ui-primitives": "file:D:/deepseek-harness/packages/client/ui-primitives",
+    "@deepseek-ai/dsh-client-ui-slots": "file:D:/deepseek-harness/packages/client/ui-slots",
+    "@deepseek-ai/dsh-client-ui-tool": "file:D:/deepseek-harness/packages/client/ui-tool",
+    "@deepseek-ai/dsh-jobs": "file:D:/deepseek-harness/packages/jobs/jobs",
+    "@deepseek-ai/dsh-jobs-local": "file:D:/deepseek-harness/packages/jobs/jobs-local",
+    "@deepseek-ai/dsh-llm": "file:D:/deepseek-harness/packages/llm/llm",
+    "@deepseek-ai/dsh-pwsh-local": "file:D:/deepseek-harness/packages/shell/pwsh-local",
+    "@deepseek-ai/dsh-pwsh-sandbox": "file:D:/deepseek-harness/packages/shell/pwsh-sandbox",
+    "@deepseek-ai/dsh-sandbox": "file:D:/deepseek-harness/packages/sandbox/sandbox",
+    "@deepseek-ai/dsh-sandbox-local": "file:D:/deepseek-harness/packages/sandbox/sandbox-local",
+    "@deepseek-ai/dsh-sandbox-policy": "file:D:/deepseek-harness/packages/sandbox/sandbox-policy",
+    "@deepseek-ai/dsh-sandbox-windows-acl": "file:D:/deepseek-harness/packages/sandbox/sandbox-windows-acl",
+    "@deepseek-ai/dsh-session": "file:D:/deepseek-harness/packages/core/session",
+    "@deepseek-ai/dsh-shell": "file:D:/deepseek-harness/packages/shell/shell",
+    "@deepseek-ai/dsh-shell-env": "file:D:/deepseek-harness/packages/shell/shell-env",
+    "@deepseek-ai/dsh-subprocess-local": "file:D:/deepseek-harness/packages/subprocess/subprocess-local",
+    "@deepseek-ai/dsh-system-prompt": "file:D:/deepseek-harness/packages/core/system-prompt",
+    "@deepseek-ai/dsh-tool-jobs": "file:D:/deepseek-harness/packages/jobs/tool-jobs",
+    "@deepseek-ai/dsh-tool-pwsh": "file:D:/deepseek-harness/packages/shell/tool-pwsh",
+    "@deepseek-ai/dsh-tools": "file:D:/deepseek-harness/packages/core/tools",
+    "@deepseek-ai/dsh-user-approval": "file:D:/deepseek-harness/packages/interaction/user-approval",
+    "@deepseek-ai/schemastery": "file:D:/deepseek-harness/vendor/schemastery"
+  },
   "devDependencies": {
+    "@deepseek-ai/dsh-client-web": "file:D:/deepseek-harness/packages/client/web",
     "@types/node": "^24.13.6",
+    "@types/react": "~18.3.1",
+    "esbuild": "^0.25.0",
     "typescript": "^5.9.3",
     "vitest": "^3.2.7"
   }
