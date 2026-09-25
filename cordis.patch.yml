@@ -16,5 +16,12 @@
 - insert:
     - id: cmd-sandbox
       name: dsh-cmd-tool/executor
+    # The BARE package name on purpose. `dsh-client-modules` discovers a browser
+    # half by walking the host Loader's entries and resolving each entry's
+    # `name` as a PACKAGE ROOT; a subpath entry never resolves, and its package
+    # is then permanently treated as having no client row
+    # (packages/client/modules/src/index.ts, `resolveMeta`). Mounting this row
+    # by name is what makes the package's `dsh.client` declaration visible, so
+    # the `Cmd` row in the Web UI depends on this line staying bare.
     - id: tool-cmd
-      name: dsh-cmd-tool/tool
+      name: dsh-cmd-tool

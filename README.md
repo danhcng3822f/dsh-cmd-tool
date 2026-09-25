@@ -8,7 +8,15 @@ The package registers two loader entries through `cordis.patch.yml`:
 | Row id | Loader specifier | Role |
 |---|---|---|
 | `cmd-sandbox` | `dsh-cmd-tool/executor` | `ctx.shell` provider: `CmdSandboxExecutor` |
-| `tool-cmd` | `dsh-cmd-tool/tool` | the model-facing `cmd` tool |
+| `tool-cmd` | `dsh-cmd-tool` | the model-facing `cmd` tool |
+
+The tool row's specifier is the **bare package name**, and that is load-bearing:
+`dsh-client-modules` discovers a browser half by walking the host Loader's
+entries and resolving each entry's `name` as a *package root*. A subpath entry
+never resolves, and its package is then permanently treated as having no client
+row — so `dsh-cmd-tool/tool` here would silently cost this package its `Cmd`
+row in the Web UI. The package root (`src/index.ts`) re-exports the tool module
+for exactly this reason, and the executor stays a subpath entry.
 
 `ctx.shell` admits exactly one provider, so the executor **replaces** the
 PowerShell-only `pwsh-sandbox` row rather than joining it. The patch disables
@@ -78,11 +86,11 @@ the tool description the model sees, so the model is not left to discover them.
 
 ## Install
 
-The package's `exports` point into `lib/` (`./tool` → `lib/tool.js`, `./executor`
-→ `lib/executor.js`) and `.gitignore` excludes `lib/`. A fresh clone therefore
-has no loadable entry point at all, and registering the bundle before building
-it produces a loader failure for a missing `dsh-cmd-tool/tool`. Building is the
-**first** install step, not an afterthought.
+The package's `exports` point into `lib/` (`.` → `lib/index.js`, `./executor` →
+`lib/executor.js`) and `.gitignore` excludes `lib/`. A fresh clone therefore has
+no loadable entry point at all, and registering the bundle before building it
+produces a loader failure for a missing `dsh-cmd-tool`. Building is the **first**
+install step, not an afterthought.
 
 ### 1. Build the package
 
@@ -146,8 +154,7 @@ Select-String -Path $env:TEMP\web-composed.yml -Pattern 'pwsh-sandbox|cmd-sandbo
 ```
 
 Expected: a `pwsh-sandbox` row carrying `disabled: true`, plus a `cmd-sandbox`
-row named `dsh-cmd-tool/executor` and a `tool-cmd` row named
-`dsh-cmd-tool/tool`.
+row named `dsh-cmd-tool/executor` and a `tool-cmd` row named `dsh-cmd-tool`.
 
 If the `pwsh-sandbox` patch reports **"entry not found"**, stop: the executor
 row would then collide with the base bundle's registration on `ctx.shell`, and

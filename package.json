@@ -4,6 +4,10 @@
   "description": "Windows Command Prompt (cmd.exe) tool for DeepSeek Harness, alongside pwsh",
   "type": "module",
   "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
     "./tool": {
       "types": "./lib/types/tool.d.ts",
       "default": "./lib/tool.js"
