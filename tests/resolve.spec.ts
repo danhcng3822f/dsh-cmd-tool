@@ -42,9 +42,12 @@ describe('resolveCmdPath', () => {
       .toBe('cmd.exe')
   })
 
-  it('resolves a real candidate on this host when one is present', () => {
-    const resolved = resolveCmdPath()
-    expect(typeof resolved).toBe('string')
-    expect(resolved.length).toBeGreaterThan(0)
+  it.skipIf(process.platform !== 'win32')('returns the first existing candidate, not the bare fallback', () => {
+    // Pins the loop's success return: without this, an implementation that
+    // always fell through to the bare name would pass every other case here.
+    const comspec = (process.env.ComSpec ?? '').trim().replace(/^"|"$/g, '')
+    const resolved = resolveCmdPath(undefined, process.env, 'win32')
+    expect(resolved).not.toBe('cmd.exe')
+    expect(resolved).toBe(comspec)
   })
 })

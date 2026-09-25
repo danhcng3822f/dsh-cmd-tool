@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
+import { SandboxPwshExecutor } from '@deepseek-ai/dsh-pwsh-sandbox'
 import type { ShellExecSpec } from '@deepseek-ai/dsh-shell'
 import { CmdSandboxExecutor } from '../src/executor.ts'
 import type { Config } from '../src/executor.ts'
@@ -97,5 +98,20 @@ describe('CmdSandboxExecutor.argv', () => {
   it('exposes the resolved cmd path', () => {
     const executor = new CmdSandboxExecutor(makeCtx(), config('D:\\alt\\cmd.exe'))
     expect(executor.cmdPath).toBe('D:\\alt\\cmd.exe')
+  })
+})
+
+describe('CmdSandboxExecutor.Config', () => {
+  it('declares its own composed schema, so the loader validates cmdPath', () => {
+    // The loader reads `plugin.Config` off the class — it unwraps a module to
+    // its default export — so this static IS the schema a composition row is
+    // validated against.
+    expect(CmdSandboxExecutor.Config).not.toBe(SandboxPwshExecutor.Config)
+    const validate = CmdSandboxExecutor.Config as unknown as (value: unknown) => Record<string, unknown>
+    const resolved = validate({ cmdPath: 'D:\\alt\\cmd.exe' })
+    expect(resolved.cmdPath).toBe('D:\\alt\\cmd.exe')
+    // The parent's defaults arrive by reference rather than by copy.
+    expect(resolved.timeoutMs).toBe(120_000)
+    expect(resolved.maxTimeoutMs).toBe(600_000)
   })
 })
