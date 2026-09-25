@@ -875,9 +875,10 @@ export class CmdSandboxExecutor extends SandboxPwshExecutor {
    *
    * It is a static on the class, not a module-level export. The loader unwraps
    * a module to its `default` export before reading `Config`
-   * (`vendor/loader/src/index.ts`, `unwrapExports`), so a module-level schema
-   * is never consulted. Without this static, `cmdPath` would still reach the
-   * constructor — cordis leaves undeclared keys in place — but nothing would
+   * (the DSH checkout's `vendor/loader/src/index.ts`, `unwrapExports`), so a
+   * module-level schema is never consulted. Without this static, `cmdPath`
+   * would still reach the constructor — cordis leaves undeclared keys in
+   * place — but nothing would
    * declare it, and the knob would rest on that leniency instead of on a
    * contract.
    */
@@ -1504,7 +1505,7 @@ function cmdDescription(backgroundEnabled: boolean, escalationModes: readonly Sa
   // Add-Type, `-f` formatting) describes PowerShell, and a `cmd` tool that
   // teaches PowerShell syntax invites the model to write it inside a batch
   // script.
-  return base + ' In both confined modes, programs cannot open named pipes, so a command that captures another '
+  return base + ' Under the Windows sandbox, programs cannot open named pipes, so a command that captures another '
     + 'program\'s output through piped stdio (Node.js `child_process.spawn`/`exec` with the default '
     + '`stdio: \'pipe\'`) fails with EPERM, while `stdio: \'inherit\'` and `stdio: \'ignore\'` spawns '
     + 'work and cmd\'s own pipelines are unaffected. That EPERM is the documented boundary: '
