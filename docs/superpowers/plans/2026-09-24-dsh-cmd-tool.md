@@ -1124,6 +1124,8 @@ import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import LocalJobRegistry from '@deepseek-ai/dsh-jobs-local'
 import * as ToolJobs from '@deepseek-ai/dsh-tool-jobs'
+import AgentRegistry from '@deepseek-ai/dsh-agent'
+import { SessionId } from '@deepseek-ai/dsh-session'
 import { ShellExecutor } from '@deepseek-ai/dsh-shell'
 import type { ShellExecRequest, ShellExecSpec, ShellProcess, ShellRunResult } from '@deepseek-ai/dsh-shell'
 import * as ShellEnv from '@deepseek-ai/dsh-shell-env'
@@ -1180,6 +1182,10 @@ async function boot(config: ToolCmd.Config = {}): Promise<void> {
   ctx = new Context()
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
+  // The job runtime refuses to start an OWNED job unless the owner is the live
+  // instance `ctx.agents` holds, and the tool always passes the calling agent
+  // as the owner, so the registry has to be mounted here.
+  await ctx.plugin(AgentRegistry)
   await ctx.plugin(LocalJobRegistry)
   await ctx.plugin(ToolJobs)
   await ctx.plugin(ShellEnv)
@@ -1205,7 +1211,26 @@ function text(result: { content: { type: string; text?: string }[] }): string {
   return result.content.filter(b => b.type === 'text').map(b => b.text).join('')
 }
 
-const agent = () => ({ session: { header: { id: 'session-cmd', cwd: 'C:\\work' } } })
+/**
+ * A REGISTERED fake agent. `dsh-jobs-local` rejects an owned job whose owner is
+ * not the exact live instance `ctx.agents` holds, so a bare `{ session }` object
+ * could only ever exercise the unowned path. The session header cwd is what the
+ * workdir assertions read.
+ */
+let agentCounter = 0
+const agent = () => {
+  const id = SessionId(`session-cmd-${++agentCounter}`)
+  const instance = {
+    id,
+    status: 'idle',
+    ctx: ctx.plugin(() => {}).ctx,
+    session: { id, header: { id, cwd: 'C:\\work' }, events: [] },
+    followup: () => {},
+    inject: () => {},
+  }
+  ctx.agents.register(instance as never)
+  return instance
+}
 
 afterEach(async () => {
   await ctx?.fiber.dispose()
@@ -1327,7 +1352,10 @@ describe('cmd tool presentation', () => {
       { command: 'dir', description: 'list' },
       { content: [{ type: 'text', text: 'body\n[exit code: 3]' }], isError: false },
     )
-    expect(view).toMatchObject({ card: 'terminal', output: 'body\n' })
+    // `parseExitStatus`'s pattern consumes the newline as the marker's
+    // delimiter, so the recovered body has no trailing newline. The harness's
+    // own pwsh suite asserts the same shape.
+    expect(view).toMatchObject({ card: 'terminal', output: 'body' })
   })
 })
 ```
