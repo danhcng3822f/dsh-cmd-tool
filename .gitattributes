@@ -1,0 +1,12 @@
+# Normalize every text file to LF, in the repository and in the working tree.
+#
+# `install.sh` is why this file exists: git's Windows default (`core.autocrlf`)
+# checks a shell script out with CRLF, and bash then reads the carriage return
+# as part of the interpreter path and dies with
+#
+#     ./install.sh: /usr/bin/env: bad interpreter: No such file or directory
+#     $'\r': command not found
+#
+# The other sources are LF-native too (TypeScript, the ESM build script, the
+# YAML patch), so one rule covers the repository.
+* text=auto eol=lf
