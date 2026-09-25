@@ -27,7 +27,10 @@
   "files": [
     "lib",
     "src",
+    "scripts",
     "cordis.patch.yml",
+    "install.sh",
+    "install.ps1",
     "README.md",
     "LICENSE"
   ],

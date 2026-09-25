@@ -86,6 +86,35 @@ the tool description the model sees, so the model is not left to discover them.
 
 ## Install
 
+### The short way
+
+```powershell
+cd D:\dsh-cmd-plugin
+.\install.ps1                 # Windows PowerShell
+```
+
+```sh
+cd /d/dsh-cmd-plugin
+./install.sh                  # Git Bash
+```
+
+Either wrapper does steps 1–3 below — build, register, link — and then tells you
+to restart `dsh`. It is idempotent (re-running never duplicates the entry),
+takes `--profile <name>` (default `web`) and `--home <path>` (default
+`$DSH_HOME`, else `~/.dsh`), and `--uninstall` reverses it.
+
+The logic lives in `scripts/install.mjs` and the two wrappers only forward to
+it, for two reasons: the profile manifest is JSON, and editing JSON portably
+needs either `jq` (not guaranteed) or Node (guaranteed — dsh runs on it); and
+this plugin is **Windows-only** while bash is not installed there by default.
+Under Git Bash the `.sh` wrapper works; under WSL it does not, because the
+Windows paths this plugin needs do not exist there.
+
+**No script restarts `dsh`.** The running server hosts the shell that invoked
+the installer, so it cannot restart itself; the last step is always yours.
+
+### The long way
+
 The package's `exports` point into `lib/` (`.` → `lib/index.js`, `./executor` →
 `lib/executor.js`) and `.gitignore` excludes `lib/`. A fresh clone therefore has
 no loadable entry point at all, and registering the bundle before building it
