@@ -27,8 +27,6 @@ import z from '@deepseek-ai/schemastery'
 import { scriptPathOf } from './protocol.ts'
 import { resolveCmdPath } from './resolve.ts'
 
-export const name = 'cmd-sandbox'
-
 /** Configuration: the local pwsh executor's knobs plus the cmd executable. */
 export interface Config extends PwshConfig {
   /**
@@ -54,11 +52,13 @@ export class CmdSandboxExecutor extends SandboxPwshExecutor {
    *
    * It is a static on the class, not a module-level export. The loader unwraps
    * a module to its `default` export before reading `Config`
-   * (`vendor/loader/src/index.ts`, `unwrapExports`), so a module-level schema
-   * is never consulted. Without this static, `cmdPath` would still reach the
-   * constructor — cordis leaves undeclared keys in place — but nothing would
-   * declare it, and the knob would rest on that leniency instead of on a
-   * contract.
+   * (`vendor/loader/src/index.ts` in the DeepSeek Harness checkout,
+   * `unwrapExports`), so a module-level schema is never consulted — and for the
+   * same reason this module exports no `name`: the plugin value the loader
+   * holds is the class itself, so `plugin.name` is the class name. Without this
+   * static, `cmdPath` would still reach the constructor — cordis leaves
+   * undeclared keys in place — but nothing would declare it, and the knob would
+   * rest on that leniency instead of on a contract.
    */
   static Config = z.intersect([
     SandboxPwshExecutor.Config,

@@ -122,7 +122,11 @@ export async function pruneStaleScriptDirs(root: string, maxAgeMs: number): Prom
         await rm(candidate, { recursive: true, force: true })
       }
     } catch {
-      // A concurrent process owns this directory; leave it alone.
+      // Best-effort over BOTH operations. `stat` fails when a concurrent
+      // process removed the entry first, and `rm` fails while a concurrent
+      // owner still holds it (a live sibling, a scanner, an antivirus). Neither
+      // belongs to this process to report, and the entry stays for the next
+      // prune.
     }
   }
 }

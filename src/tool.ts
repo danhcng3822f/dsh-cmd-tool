@@ -132,7 +132,7 @@ function cmdDescription(backgroundEnabled: boolean, escalationModes: readonly Sa
   // Add-Type, `-f` formatting) describes PowerShell, and a `cmd` tool that
   // teaches PowerShell syntax invites the model to write it inside a batch
   // script.
-  return base + ' In both confined modes, programs cannot open named pipes, so a command that captures another '
+  return base + ' Under the Windows sandbox, programs cannot open named pipes, so a command that captures another '
     + 'program\'s output through piped stdio (Node.js `child_process.spawn`/`exec` with the default '
     + '`stdio: \'pipe\'`) fails with EPERM, while `stdio: \'inherit\'` and `stdio: \'ignore\'` spawns '
     + 'work and cmd\'s own pipelines are unaffected. That EPERM is the documented boundary: '
@@ -218,7 +218,10 @@ export function apply(ctx: Context, config: Config = {}): void {
   // in the temp root forever. Age is the criterion because a dead pid cannot be
   // told apart from a reused one.
   const scriptRoot = config.scriptDir ?? DEFAULT_SCRIPT_DIR
-  void pruneStaleScriptDirs(scriptRoot, 24 * 60 * 60 * 1000)
+  // `pruneStaleScriptDirs` is expected to swallow its own errors, but this call
+  // must not depend on that from a distance: an unhandled rejection is fatal in
+  // dsh, so the safety is attached here rather than assumed there.
+  void pruneStaleScriptDirs(scriptRoot, 24 * 60 * 60 * 1000).catch(() => {})
   // Best-effort: `force` suppresses only a missing path, and a background job
   // still holding its script open at teardown would otherwise reject. An
   // unhandled rejection is fatal in dsh — the host installs a fail-loud handler
