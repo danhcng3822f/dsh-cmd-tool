@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "description": "Windows Command Prompt (cmd.exe) tool for DeepSeek Harness, alongside pwsh",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/danhcng3822f/dsh-cmd-tool.git"
+  },
   "exports": {
     ".": {
       "types": "./lib/types/index.d.ts",
@@ -24,7 +28,8 @@
     "lib",
     "src",
     "cordis.patch.yml",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "dsh": {
     "bundle": {

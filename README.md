@@ -372,4 +372,6 @@ gating, disposal on every path, `presentResult`).
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).
+
+Copyright (c) 2026 danhcng3822f.
