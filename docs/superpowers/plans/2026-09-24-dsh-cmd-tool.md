@@ -1499,14 +1499,15 @@ function cmdDescription(backgroundEnabled: boolean, escalationModes: readonly Sa
     + 'On Windows a force-killed command settles as `[exit code: 1]` without a signal marker — treat it as an interruption, not a command failure. '
     + background
   if (escalationModes.length === 0) return base
-  return base + ' Under the Windows sandbox, read-only pwsh runs in PowerShell ConstrainedLanguage mode, while '
-    + 'workspace-write stays in FullLanguage unless host policy says so. In read-only, prefer cmdlets and core types (`[string]`, `[datetime]`, `[regex]`, `[guid]`); '
-    + '.NET static calls (`[System.IO.*]::`, `[math]::`), `Add-Type`, COM objects, and reflection fail '
-    + 'with "only core types" errors. `-f` formatting, property access, and core cmdlets work. '
-    + 'In both confined modes, programs cannot open named pipes, so a command that captures another '
+  // Only the dialect-independent half of the pwsh tool's sandbox paragraph is
+  // carried here. Its language-mode advice (ConstrainedLanguage, cmdlets,
+  // Add-Type, `-f` formatting) describes PowerShell, and a `cmd` tool that
+  // teaches PowerShell syntax invites the model to write it inside a batch
+  // script.
+  return base + ' In both confined modes, programs cannot open named pipes, so a command that captures another '
     + 'program\'s output through piped stdio (Node.js `child_process.spawn`/`exec` with the default '
     + '`stdio: \'pipe\'`) fails with EPERM, while `stdio: \'inherit\'` and `stdio: \'ignore\'` spawns '
-    + 'work and PowerShell\'s own pipelines are unaffected. That EPERM is the documented boundary: '
+    + 'work and cmd\'s own pipelines are unaffected. That EPERM is the documented boundary: '
     + 'do not retry the command another way — escalate the exact command once or restructure it to '
     + 'avoid capturing output. '
     + 'Attempting a command the sandbox may deny is safe and expected: run it and read the '
@@ -1605,7 +1606,14 @@ export function apply(ctx: Context, config: Config = {}): void {
   // told apart from a reused one.
   const scriptRoot = config.scriptDir ?? DEFAULT_SCRIPT_DIR
   void pruneStaleScriptDirs(scriptRoot, 24 * 60 * 60 * 1000)
-  ctx.effect(() => () => { void rm(join(scriptRoot, String(process.pid)), { recursive: true, force: true }) })
+  // Best-effort: `force` suppresses only a missing path, and a background job
+  // still holding its script open at teardown would otherwise reject. An
+  // unhandled rejection is fatal in dsh — the host installs a fail-loud handler
+  // that exits the process — so a locked temp file must not turn a clean
+  // shutdown into a crash.
+  ctx.effect(() => () => {
+    rm(join(scriptRoot, String(process.pid)), { recursive: true, force: true }).catch(() => {})
+  })
 
   const resolveSandboxPolicy = (exec: ToolExecution): SandboxExecutionPolicy | undefined =>
     sandboxPolicy?.resolve(exec.agent === undefined ? {} : { session: exec.agent.session })
@@ -1697,7 +1705,11 @@ The `execute` body:
                 // The script must outlive the process, so it is disposed with
                 // the job rather than with this call.
                 done: proc.done.then(async () => {
-                  await script.dispose()
+                  // Best-effort for the same reason as the foreground path, and
+                  // more sharply: a rejection here makes the job runtime settle
+                  // this job as `failed`, discarding a command that ran to
+                  // completion along with its exit code and output.
+                  await script.dispose().catch(() => {})
                   return processOutcome(proc)
                 }),
                 readOutput: () => renderCmdProcessRead(proc.readOutput(), proc.sandbox, escalationModes),
@@ -1719,8 +1731,13 @@ The `execute` body:
         return canonicalCmdResult(result)
       } finally {
         // A background job owns the script from here; every other path — success,
-        // non-zero exit, timeout, abort, or a throw — removes it now.
-        if (!handedOff) await script.dispose()
+        // non-zero exit, timeout, abort, or a throw — removes it now. Removal is
+        // best-effort: a just-exited cmd.exe or a scanner can still hold the file
+        // (EPERM/EBUSY), and a throw from this finally would replace the call's
+        // real result, reporting a command that ran and produced output as a
+        // tool error. Anything left behind is covered by the pid-directory
+        // teardown and pruneStaleScriptDirs.
+        if (!handedOff) await script.dispose().catch(() => {})
       }
     },
 ```
